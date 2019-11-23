@@ -220,18 +220,20 @@ class GAReader:
         Args:
         - data: (object) containing training data
         """
-        feed_dict = {self.doc: dw, self.qry: qw,
-                     self.doc_char: dt, self.qry_char: qt, self.target: a,
-                     self.doc_mask: m_dw, self.qry_mask: m_qw,
-                     self.token: tt, self.char_mask: tm,
-                     self.cand: c, self.cand_mask: m_c,
-                     self.cloze: cl, self.keep_prob: 1 - dropout,
-                     self.lr: learning_rate}
-        if self.use_feat:
-            feat = prepare_input(dw, qw)
-            feed_dict += {self.feat: feat}
+        feed_dict = {
+            self.doc: dw, self.qry: qw,
+            self.doc_char: dt, self.qry_char: qt, self.target: a,
+            self.doc_mask: m_dw, self.qry_mask: m_qw,
+            self.token: tt, self.char_mask: tm,
+            self.cand: c, self.cand_mask: m_c,
+            self.cloze: cl, self.keep_prob: 1 - dropout,
+            self.lr: learning_rate
+        }
 
-        loss, acc, _, = \
+        if self.use_feat:
+            feed_dict[self.feat] = prepare_input(dw, qw)
+
+        loss, acc, *_ = \
             sess.run([self.loss, self.accuracy, self.updates], feed_dict)
         return loss, acc
 
@@ -247,16 +249,17 @@ class GAReader:
         for dw, dt, qw, qt, a, m_dw, m_qw, tt, \
                 tm, c, m_c, cl, fnames in data:
             start = time.time()
-            feed_dict = {self.doc: dw, self.qry: qw,
-                         self.doc_char: dt, self.qry_char: qt, self.target: a,
-                         self.doc_mask: m_dw, self.qry_mask: m_qw,
-                         self.token: tt, self.char_mask: tm,
-                         self.cand: c, self.cand_mask: m_c,
-                         self.cloze: cl, self.keep_prob: 1.,
-                         self.lr: 0.}
+            feed_dict = {
+                self.doc: dw, self.qry: qw,
+                self.doc_char: dt, self.qry_char: qt, self.target: a,
+                self.doc_mask: m_dw, self.qry_mask: m_qw,
+                self.token: tt, self.char_mask: tm,
+                self.cand: c, self.cand_mask: m_c,
+                self.cloze: cl, self.keep_prob: 1.,
+                self.lr: 0.
+            }
             if self.use_feat:
-                feat = prepare_input(dw, qw)
-                feed_dict += {self.feat: feat}
+                feed_dict[self.feat] = prepare_input(dw, qw)
             _loss, _acc = sess.run([self.loss, self.accuracy], feed_dict)
             n_exmple += dw.shape[0]
             loss += _loss

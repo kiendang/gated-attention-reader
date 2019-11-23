@@ -11,7 +11,7 @@ import random
 MAX_WORD_LEN = 10
 
 
-class minibatch_loader:
+class MinibatchLoader:
     def __init__(self, questions, batch_size, shuffle=True, sample=1.0):
         self.batch_size = batch_size
         if sample == 1.0:

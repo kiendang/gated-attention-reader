@@ -10,8 +10,8 @@ import os
 import logging
 import time
 import numpy as np
-from utils.data_preprocessor import data_preprocessor
-from utils.minibatch_loader import minibatch_loader
+from utils.data_preprocessor import DataPreprocessor
+from utils.minibatch_loader import MinibatchLoader
 from utils.misc import check_dir, load_word2vec_embeddings
 from model import GAReader
 
@@ -22,36 +22,39 @@ def str2bool(v):
 
 def get_args():
     parser = argparse.ArgumentParser(
-        description='Gated Attention Reader for \
-        Text Comprehension Using TensorFlow')
+        description=(
+            'Gated Attention Reader for'
+            'Text Comprehension Using TensorFlow'))
     parser.register('type', 'bool', str2bool)
 
+    parser.add_argument('--mode', type=int, default=0,
+                        help='0-train, 1-test')
     parser.add_argument('--resume', type='bool', default=False,
                         help='whether to keep training from previous model')
-    parser.add_argument('--use_feat', type='bool', default=False,
+    parser.add_argument('--use_feat', type='bool', default=True,
                         help='whether to use extra features')
-    parser.add_argument('--train_emb', type='bool', default=True,
+    parser.add_argument('--train_emb', type='bool', default=False,
                         help='whether to train embedding')
-    parser.add_argument('--init_test', type='bool', default=True,
+    parser.add_argument('--init_test', type='bool', default=False,
                         help='whether to perform initial test')
-    parser.add_argument('--data_dir', type=str, default=None,
+    parser.add_argument('--data_dir', type=str, default='data/bioread',
                         help='data directory containing input')
-    parser.add_argument('--log_dir', type=str, default=None,
+    parser.add_argument('--log_dir', type=str, default='/logs',
                         help='directory containing tensorboard logs')
-    parser.add_argument('--save_dir', type=str, default=None,
+    parser.add_argument('--save_dir', type=str, default='/model',
                         help='directory to store checkpointed models')
     parser.add_argument('--embed_file', type=str,
                         default='data/word2vec_glove.txt',
                         help='word embedding initialization file')
-    parser.add_argument('--gru_size', type=int, default=256,
+    parser.add_argument('--gru_size', type=int, default=128,
                         help='size of word GRU hidden state')
     parser.add_argument('--n_layers', type=int, default=3,
                         help='number of layers of the model')
     parser.add_argument('--batch_size', type=int, default=32,
                         help='mini-batch size')
-    parser.add_argument('--n_epoch', type=int, default=10,
+    parser.add_argument('--n_epoch', type=int, default=20,
                         help='number of epochs')
-    parser.add_argument('--eval_every', type=int, default=10000,
+    parser.add_argument('--eval_every', type=int, default=250,
                         help='evaluation frequency')
     parser.add_argument('--print_every', type=int, default=50,
                         help='print frequency')
@@ -63,7 +66,7 @@ def get_args():
                         help='random seed for tensorflow')
     parser.add_argument('--max_example', type=int, default=None,
                         help='maximum number of training examples')
-    parser.add_argument('--char_dim', type=int, default=0,
+    parser.add_argument('--char_dim', type=int, default=25,
                         help='size of character GRU hidden state')
     parser.add_argument('--gating_fn', type=str, default='tf.multiply',
                         help='gating function')
@@ -73,10 +76,32 @@ def get_args():
     return args
 
 
+def test(args):
+    use_chars = args.char_dim > 0
+    dp = DataPreprocessor()
+    data = dp.preprocess(
+        question_dir=args.data_dir,
+        no_training_set=True,
+        max_example=args.max_example,
+        use_chars=use_chars)
+    
+    test_batch_loader = MinibatchLoader(
+        data.test, args.batch_size, shuffle=False)
+    
+    model = GAReader(args.n_layers, data.vocab_size, data.n_chars,
+                     args.gru_size, 200, args.train_emb,
+                     args.char_dim, args.use_feat, args.gating_fn)
+    
+    with tf.Session() as sess:
+        model.restore(sess, args.save_dir)
+        loss, acc = model.validate(sess, test_batch_loader)
+        logging.info("Test loss: {}, test acc: {}".format(loss, acc))
+
+
 def train(args):
     use_chars = args.char_dim > 0
     # load data
-    dp = data_preprocessor()
+    dp = DataPreprocessor()
     data = dp.preprocess(
         question_dir=args.data_dir,
         no_training_set=False,
@@ -84,11 +109,11 @@ def train(args):
         use_chars=use_chars)
 
     # build minibatch loader
-    train_batch_loader = minibatch_loader(
+    train_batch_loader = MinibatchLoader(
         data.training, args.batch_size, sample=1.0)
-    valid_batch_loader = minibatch_loader(
+    valid_batch_loader = MinibatchLoader(
         data.validation, args.batch_size, shuffle=False)
-    test_batch_loader = minibatch_loader(
+    test_batch_loader = MinibatchLoader(
         data.test, args.batch_size, shuffle=False)
     if not args.resume:
         logging.info("loading word2vec file ...")
@@ -104,7 +129,7 @@ def train(args):
         saver = tf.train.Saver(tf.global_variables())
     else:
         model = GAReader(args.n_layers, data.vocab_size, data.n_chars,
-                         args.gru_size, 100, args.train_emb,
+                         args.gru_size, 200, args.train_emb,
                          args.char_dim, args.use_feat, args.gating_fn)
 
     with tf.Session() as sess:
@@ -155,7 +180,12 @@ def train(args):
                         it % len(train_batch_loader) == 0:
                     valid_loss, valid_acc = model.validate(
                         sess, valid_batch_loader)
+                    logging.info(
+                        "Epoch: {}, it: {}, valid loss: {}, valid acc: {}"
+                        .format(epoch, it, valid_loss, valid_acc)
+                    )
                     if valid_acc >= best_acc:
+                        best_acc = valid_acc
                         logging.info("Best valid acc: {}".format(best_acc))
                         model.save(sess, saver, args.save_dir)
                     start = time.time()
@@ -182,8 +212,13 @@ if __name__ == "__main__":
                             datefmt='%m-%d %H:%M')
     else:
         logging.basicConfig(filename=log_file,
-                            filemode='w', level=logging.DEBUG,
+                            filemode='a', level=logging.DEBUG,
                             format='%(asctime)s %(message)s',
                             datefmt='%m-%d %H:%M')
     logging.info(args)
-    train(args)
+    if args.mode == 0:
+        train(args)
+    elif args.mode == 1:
+        test(args)
+    else:
+        exit(0)

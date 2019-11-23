@@ -23,7 +23,7 @@ SYMB_END = "@end"
 UNK = "UNK"
 
 
-class data_holder:
+class DataHolder:
     def __init__(self, dictionary, n_entities, training, validation, test):
         self.dictionary = dictionary
         self.training = training
@@ -35,7 +35,7 @@ class data_holder:
         self.inv_dictionary = {v: k for k, v in dictionary[0].items()}
 
 
-class data_preprocessor:
+class DataPreprocessor:
     def preprocess(self, question_dir, max_example=None,
                    no_training_set=False, use_chars=True):
         """
@@ -62,7 +62,7 @@ class data_preprocessor:
         test = self.parse_all_files(
             question_dir + "/test", dictionary, None, use_chars)
 
-        data = data_holder(
+        data = DataHolder(
             dictionary, num_entities, training, validation, test)
         return data
 
@@ -115,9 +115,10 @@ class data_preprocessor:
             vocabularies = list(entities) + list(tokens)
             vocabularies.insert(0, UNK)
             logging.info("writing vocabularies to " + vocab_file + " ...")
-            vocab_fp = open(vocab_file, "w", encoding='utf-8')
-            vocab_fp.write('\n'.join(vocabularies))
-            vocab_fp.close()
+
+            with open(vocab_file, "w", encoding='utf-8') as vocab_fp:
+                vocab_fp.write('\n'.join(vocabularies))
+
         vocab_size_ = len(vocabularies)
         # word dictionary: word -> index
         word_dictionary = dict(zip(vocabularies, range(vocab_size_)))
@@ -143,6 +144,7 @@ class data_preprocessor:
         w_dict, c_dict = dictionary[0], dictionary[1]
         with open(fname, encoding='utf-8') as fp:
             raw = fp.readlines()
+
         doc_raw = raw[2].split()  # document
         qry_raw = raw[4].split()  # query
         ans_raw = raw[6].strip()  # answer
@@ -178,8 +180,8 @@ class data_preprocessor:
         ans = list(map(lambda w: w_dict.get(w, 0), ans_raw.split()))
         cand = [list(map(lambda w:w_dict.get(w, 0), c)) for c in cand_raw]
 
-        return doc_words, qry_words, ans, cand, \
-            doc_chars, qry_chars, cloze, fname
+        return(doc_words, qry_words, ans, cand,
+            doc_chars, qry_chars, cloze, fname)
 
     def parse_all_files(self, directory, dictionary, max_example, use_chars):
         """
@@ -200,23 +202,18 @@ class data_preprocessor:
 
     def gen_text_for_word2vec(self, question_dir, text_file):
 
-            fnames = []
-            fnames += glob.glob(question_dir + "/training/*.question")
+        fnames = []
+        fnames += glob.glob(question_dir + "/training/*.question")
 
-            out = open(text_file, "w")
-
+        with open(text_file, "w") as out:
             for fname in fnames:
-
-                fp = open(fname, encoding='utf-8')
-                fp.readline()
-                fp.readline()
-                document = fp.readline()
-                fp.readline()
-                query = fp.readline()
-                fp.close()
+                with open(fname, encoding='utf-8') as fp:
+                    fp.readline()
+                    fp.readline()
+                    document = fp.readline()
+                    fp.readline()
+                    query = fp.readline()
 
                 out.write(document.strip())
                 out.write(" ")
                 out.write(query.strip())
-
-            out.close()

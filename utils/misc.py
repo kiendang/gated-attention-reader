@@ -59,17 +59,15 @@ def load_word2vec_embeddings(dictionary, vocab_embed_file):
     if vocab_embed_file is None:
         return None, EMBED_DIM
 
-    fp = open(vocab_embed_file, encoding='utf-8')
-
-    info = fp.readline().split()
-    embed_dim = int(info[1])
-    # vocab_embed: word --> vector
-    vocab_embed = {}
-    for line in fp:
-        line = line.split()
-        vocab_embed[line[0]] = np.array(
-            list(map(float, line[1:])), dtype='float32')
-    fp.close()
+    with open(vocab_embed_file, encoding='utf-8') as fp:
+        info = fp.readline().split()
+        embed_dim = int(info[1])
+        # vocab_embed: word --> vector
+        vocab_embed = {}
+        for line in fp:
+            line = line.split()
+            vocab_embed[line[0]] = np.array(
+                list(map(float, line[1:])), dtype='float32')
 
     vocab_size = len(dictionary)
     W = np.random.randn(vocab_size, embed_dim).astype('float32')
@@ -101,5 +99,5 @@ def check_dir(*args, exit_function=False):
 def prepare_input(d, q):
     f = np.zeros(d.shape[:2]).astype('int32')
     for i in range(d.shape[0]):
-        f[i, :] = np.in1d(d[i, :, 0], q[i, :, 0])
+        f[i, :] = np.in1d(d[i, :], q[i, :])
     return f
